@@ -1,6 +1,6 @@
 local M = {}
 
-M.showTracks = function (songs)
+M.showTracks = function (playlist_uri, songs)
   local pickers = require "telescope.pickers"
   local finders = require "telescope.finders"
   local sorters = require "telescope.sorters"
@@ -23,8 +23,8 @@ M.showTracks = function (songs)
       actions.select_default:replace(function()
         actions.close(prompt_bufnr)
         local selection = require('telescope.actions.state').get_selected_entry()
-        vim.print("Playing " .. selection.value.uri)
-        vim.api.nvim_command("SpotifyPlay " .. selection.value.uri)
+        vim.print("SpotifyPlay " .. playlist_uri .. " " .. selection.value.uri)
+        vim.api.nvim_command("SpotifyPlay " .. playlist_uri .. " " .. selection.value.uri)
       end)
       return true
     end,
@@ -61,7 +61,7 @@ M.showPlaylists = function (playlists)
         actions.close(prompt_bufnr)
         local selection = require('telescope.actions.state').get_selected_entry()
         local tracks = M.getPlaylistTracks(selection.value.id)
-        M.showTracks(tracks)
+        M.showTracks(selection.value.uri, tracks)
       end)
       return true
     end,

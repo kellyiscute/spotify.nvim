@@ -93,7 +93,7 @@ class SpotifyApi:
         return data['id']
 
     def get_playlists(self):
-        res = requests.get(f"https://api.spotify.com/v1/users/{self.userId}/playlists", headers={"Authorization": f"Bearer {self.access_token}"})
+        res = requests.get(f"https://api.spotify.com/v1/users/{self.userId}/playlists", headers={"Authorization": f"Bearer {self.access_token}"}, params={ "limit": 50 })
         data = res.json()
         playlists = data['items']
         names = [{ "name": playlist['name'], "uri": playlist['uri'], "id": playlist['id'] } for playlist in playlists]
@@ -103,18 +103,18 @@ class SpotifyApi:
     def get_liked_songs(self):
         res = requests.get("https://api.spotify.com/v1/me/tracks", headers={ "Authorization": f"Bearer {self.access_token}" })
         data = res.json()
-        uris = [track['track']['uri'] for track in data['items']]
+        uris = [track['track'] for track in data['items']]
 
         return uris
 
     def add_to_queue(self, uri):
         requests.post("https://api.spotify.com/v1/me/player/queue", headers={ "Authorization": f"Bearer {self.access_token}" }, params={ "uri": uri })
 
-    def play(self, uri: str | list[str] | None = None):
+    def play(self, uri: str | list[str] | None = None, offset: str | None = None):
         if uri is None:
             requests.put("https://api.spotify.com/v1/me/player/play", headers={ "Authorization": f"Bearer {self.access_token}" })
         if type(uri) is str:
-            requests.put("https://api.spotify.com/v1/me/player/play", headers={ "Authorization": f"Bearer {self.access_token}" }, json={ "context_uri": uri })
+            requests.put("https://api.spotify.com/v1/me/player/play", headers={ "Authorization": f"Bearer {self.access_token}" }, json={ "context_uri": uri, "offset": { "uri": offset } })
         else:
             requests.put("https://api.spotify.com/v1/me/player/play", headers={ "Authorization": f"Bearer {self.access_token}" }, json={ "uris": uri })
 

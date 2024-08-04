@@ -8,8 +8,6 @@ from . import bottle
 from .spotify_api import SpotifyApi
 import multiprocessing
 import random
-import requests
-import json
 import distutils.spawn
 import platform
 
@@ -136,6 +134,13 @@ class SpotifyPlugin:
 
         return api.get_liked_songs()
 
+    def _get_liked_songs_uris(self):
+        api = self._check_auth()
+        if api is None:
+            return
+
+        return [track['uri'] for track in api.get_liked_songs()]
+
     def _add_to_queue(self, uri):
         api = self._check_auth()
         if api is None:
@@ -154,15 +159,26 @@ class SpotifyPlugin:
             self.nvim.command(f'echo "resume playing"')
             return
 
-        uri = args[0]
-        if uri == "__liked__":
-            uris = self._get_liked_songs()
+        context_uri = args[0]
+        uri = len(args) > 1 and args[1] or None
+        if uri is not None:
+            if context_uri == "__liked__":
+                uris = self._get_liked_songs_uris()
+                if uris is None:
+                    return
+                uris.remove(uri)
+                uris.insert(0, uri)
+                api.play(uris)
+            else:
+                api.play(context_uri, uri)
+            return
+
+        if context_uri == "__liked__":
+            uris = self._get_liked_songs_uris()
             api.play(uris)
-        elif uri.startswith("spotify:track:"):
-            self._add_to_queue(uri)
         else:
-            self.nvim.command(f'echo "Playing uri: {uri}"')
-            api.play(uri)
+            self.nvim.command(f'echo "Playing uri: {context_uri}"')
+            api.play(context_uri)
 
     @pynvim.command("SpotifyPause")
     def pause(self):
@@ -177,6 +193,13 @@ class SpotifyPlugin:
         api = self._check_auth()
         if api is None:
             raise Exception("Not authenticated yet, please run :SpotifyAuth first")
+
+        id = args[0]
+        if id == "__liked__":
+            data = self._get_liked_songs()
+            if data is None:
+                return []
+            return data
 
         data = api.get_playlist_tracks(args[0])
         tracks = [track['track'] for track in data]
