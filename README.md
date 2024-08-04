@@ -42,4 +42,6 @@ resume playing, or, if you would like, pass in a Spotify URI to play the corresp
 pause - of course
 
 ### SpotifyPlaylist
-List all your playlists using Telescope. Use `<CR>` to play.
+List all your playlists using Telescope. 
+- Use `<CR>` to play.
+- Use `<C-d>` to view playlist and then <CR> to play selected track.
