@@ -74,21 +74,22 @@ class SpotifyPlugin:
         
         return self.api.authenticate(code)
 
-    def _check_auth(self):
+    def _check_auth(self) -> SpotifyApi | None:
         if self.api is None:
             self.nvim.command('echo "Please set client_id and client_secret"')
-            return False
+            return None
 
         if self.api.access_token is None:
             self.api.load_user()
             if self.api.access_token is None:
                 self.nvim.command('echo "Not authenticated yet, please run :SpotifyAuth first"')
-                return False
-        return True
+                return None
+        return self.api
 
     @pynvim.command('SpotifyAuth')
     def auth(self):
-        if self.api is None:
+        api = self._check_auth()
+        if api is None:
             self.nvim.command('echo "Please set client_id and client_secret"')
             return;
 
@@ -113,65 +114,71 @@ class SpotifyPlugin:
             pass
         proc.kill()
         self.nvim.command('echo "Getting access token..."')
-        self.api.authenticate(result)
+        api.authenticate(result)
         self.nvim.command(f'echo "Authenticated!"')
 
     @pynvim.command("SpotifyPlaylist")
     def getPlaylists(self):
-        if not self._check_auth() or self.api is None:
+        api = self._check_auth()
+        if api is None:
             return
 
-        names = self.api.get_playlists()
+        names = api.get_playlists()
         names.append({ "name": "Liked Songs", "uri": "__liked__", "id": "__liked__" })
 
         self.nvim.exec_lua("require('spotify').showPlaylists(...)", names)
         pass
 
     def _get_liked_songs(self):
-        if not self._check_auth() or self.api is None:
+        api = self._check_auth()
+        if api is None:
             return
 
-        return self.api.get_liked_songs()
+        return api.get_liked_songs()
 
     def _add_to_queue(self, uri):
-        if not self._check_auth() or self.api is None:
+        api = self._check_auth()
+        if api is None:
             return
 
-        self.api.add_to_queue(uri)
+        api.add_to_queue(uri)
 
     @pynvim.command("SpotifyPlay", nargs="*")
     def play(self, args):
-        if not self._check_auth() or self.api is None:
+        api = self._check_auth()
+        if api is None:
             return
 
         if len(args) == 0:
-            self.api.play()
+            api.play()
             self.nvim.command(f'echo "resume playing"')
             return
 
         uri = args[0]
         if uri == "__liked__":
             uris = self._get_liked_songs()
-            self.api.play(uris)
+            api.play(uris)
         elif uri.startswith("spotify:track:"):
             self._add_to_queue(uri)
         else:
             self.nvim.command(f'echo "Playing uri: {uri}"')
-            self.api.play(uri)
+            api.play(uri)
 
     @pynvim.command("SpotifyPause")
     def pause(self):
-        if not self._check_auth() or self.api is None:
+        api = self._check_auth()
+        if api is None:
             return
         
-        self.api.pause()
+        api.pause()
 
     @pynvim.function("SpotifyGetPlaylistTracks", sync=True)
     def get_playlist_tracks(self, args):
-        if not self._check_auth() or self.api is None:
-            return
+        api = self._check_auth()
+        if api is None:
+            raise Exception("Not authenticated yet, please run :SpotifyAuth first")
 
-        data = self.api.get_playlist_tracks(args[0])
+        data = api.get_playlist_tracks(args[0])
         tracks = [track['track'] for track in data]
 
         return tracks
