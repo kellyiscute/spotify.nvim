@@ -9,6 +9,7 @@ import random
 import requests
 import json
 import distutils.spawn
+import platform
 
 scopes = ["user-read-playback-state", "user-modify-playback-state", "user-read-currently-playing", "playlist-read-private", "playlist-read-collaborative", "user-library-read"]
 
@@ -142,6 +143,14 @@ class SpotifyPlugin:
             self.nvim.command('echo "Not authenticated yet, please run :SpotifyAuth first"')
         self._refresh_access_token()
 
+    def _check_auth(self):
+        if self.access_token is None:
+            self._load_user()
+            if self.access_token is None:
+                self.nvim.command('echo "Not authenticated yet, please run :SpotifyAuth first"')
+                return False
+        return True
+
     @pynvim.command('SpotifyAuth')
     def auth(self):
         if self.client_id is None or self.client_secret is None:
@@ -152,7 +161,9 @@ class SpotifyPlugin:
         proc = multiprocessing.Process(target=startServer, args=(value, self.client_id), daemon=True)
         proc.start()
 
-        if distutils.spawn.find_executable('xdg-open'):
+        if platform.system() == 'Windows':
+            os.system('start http://localhost:8080')
+        elif distutils.spawn.find_executable('xdg-open'):
             os.system('xdg-open http://localhost:8080')
         elif distutils.spawn.find_executable('open'):
             os.system('open http://localhost:8080')
@@ -185,11 +196,9 @@ class SpotifyPlugin:
 
     @pynvim.command("SpotifyPlaylist")
     def getPlaylists(self):
-        if self.userId is None:
-            self._load_user()
-            if self.userId is None:
-                self.nvim.command('echo "Not authenticated yet, please run :SpotifyAuth first"')
-                return
+        if not self._check_auth():
+            return
+
         res = requests.get(f"https://api.spotify.com/v1/users/{self.userId}/playlists", headers={"Authorization": f"Bearer {self.access_token}"})
         data = res.json()
         playlists = data['items']
@@ -200,18 +209,35 @@ class SpotifyPlugin:
         pass
 
     def _get_liked_songs(self):
+        if not self._check_auth():
+            return
+
         res = requests.get("https://api.spotify.com/v1/me/tracks", headers={ "Authorization": f"Bearer {self.access_token}" })
         data = res.json()
         uris = [track['track']['uri'] for track in data['items']]
 
         return uris
 
-    @pynvim.command("SpotifyPlay", nargs="1")
+    @pynvim.command("SpotifyPlay", nargs="*")
     def play(self, args):
+        if not self._check_auth():
+            return
+
+        if len(args) == 0:
+            requests.put("https://api.spotify.com/v1/me/player/play", headers={ "Authorization": f"Bearer {self.access_token}" })
+            return
+
         uri = args[0]
         if uri == "__liked__":
             uris = self._get_liked_songs()
             requests.put("https://api.spotify.com/v1/me/player/play", headers={ "Authorization": f"Bearer {self.access_token}" }, json={ "uris": uris })
         else:
             requests.put("https://api.spotify.com/v1/me/player/play", headers={ "Authorization": f"Bearer {self.access_token}" }, json={ "context_uri": uri })
+
+    @pynvim.command("SpotifyPause")
+    def pause(self):
+        if not self._check_auth():
+            return
+
+        requests.put("https://api.spotify.com/v1/me/player/pause", headers={ "Authorization": f"Bearer {self.access_token}" })
 
