@@ -2,6 +2,8 @@ from functools import cache
 import requests
 import json
 import os
+import time
+import math
 
 class SpotifyApi:
     client_id: str
@@ -11,6 +13,7 @@ class SpotifyApi:
     access_token: str | None = None
     token_type: str | None = None
     expires_in: int | None = None
+    expires_at: int | None = None
     refresh_token: str | None = None
 
     def __init__(self, client_id, client_secret):
@@ -32,6 +35,7 @@ class SpotifyApi:
         self.expires_in = data['expires_in']
         self.refresh_token = data['refresh_token']
         self.userId = data['user_id']
+        self.expires_at = 0
         f.close()
         self.refresh_access_token()
 
@@ -66,6 +70,7 @@ class SpotifyApi:
         self.access_token = access_token
         self.token_type = token_type
         self.expires_in = expires_in
+        self.expires_at = math.floor(time.time() + expires_in)
         self.refresh_token = refresh_token
         userId = self._get_profile()
         self.userId = userId
@@ -84,8 +89,17 @@ class SpotifyApi:
         })
         data = res.json()
         self.access_token = data['access_token']
+        self.expires_at = math.floor(time.time() + data['expires_in'])
+        self.save_user()
+
+    def _check_expiration(self):
+        if self.expires_at is None:
+            return
+        if self.expires_at - 60 < time.time():
+            self.refresh_access_token()
 
     def _get_profile(self):
+        self._check_expiration()
         res = requests.get("https://api.spotify.com/v1/me", headers={
             "Authorization": f"Bearer {self.access_token}"
         })
@@ -93,6 +107,7 @@ class SpotifyApi:
         return data['id']
 
     def get_playlists(self):
+        self._check_expiration()
         res = requests.get(f"https://api.spotify.com/v1/users/{self.userId}/playlists", headers={"Authorization": f"Bearer {self.access_token}"}, params={ "limit": 50 })
         data = res.json()
         playlists = data['items']
@@ -101,6 +116,7 @@ class SpotifyApi:
         return names
     
     def get_liked_songs(self):
+        self._check_expiration()
         res = requests.get("https://api.spotify.com/v1/me/tracks", headers={ "Authorization": f"Bearer {self.access_token}" })
         data = res.json()
         uris = [track['track'] for track in data['items']]
@@ -108,20 +124,27 @@ class SpotifyApi:
         return uris
 
     def add_to_queue(self, uri):
+        self._check_expiration()
         requests.post("https://api.spotify.com/v1/me/player/queue", headers={ "Authorization": f"Bearer {self.access_token}" }, params={ "uri": uri })
 
     def play(self, uri: str | list[str] | None = None, offset: str | None = None):
+        self._check_expiration()
         if uri is None:
             requests.put("https://api.spotify.com/v1/me/player/play", headers={ "Authorization": f"Bearer {self.access_token}" })
         if type(uri) is str:
-            requests.put("https://api.spotify.com/v1/me/player/play", headers={ "Authorization": f"Bearer {self.access_token}" }, json={ "context_uri": uri, "offset": { "uri": offset } })
+            if offset is None:
+                requests.put("https://api.spotify.com/v1/me/player/play", headers={ "Authorization": f"Bearer {self.access_token}" }, json={ "context_uri": uri })
+            else:
+                requests.put("https://api.spotify.com/v1/me/player/play", headers={ "Authorization": f"Bearer {self.access_token}" }, json={ "context_uri": uri, "offset": { "uri": offset } })
         else:
             requests.put("https://api.spotify.com/v1/me/player/play", headers={ "Authorization": f"Bearer {self.access_token}" }, json={ "uris": uri })
 
     def pause(self):
+        self._check_expiration()
         requests.put("https://api.spotify.com/v1/me/player/pause", headers={ "Authorization": f"Bearer {self.access_token}" })
 
     def get_playlist_tracks(self, playlist_id: str):
+        self._check_expiration()
         res = requests.get(f"https://api.spotify.com/v1/playlists/{playlist_id}/tracks", headers={ "Authorization": f"Bearer {self.access_token}" })
         data = res.json()
         
